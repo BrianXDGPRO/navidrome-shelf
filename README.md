@@ -3,14 +3,14 @@ Tu biblioteca de **Navidrome** (y servidores compatibles con **Subsonic / OpenSu
 
 > Este proyecto es un fork y adaptación web independiente (*standalone*) de [**Spotify Reimagined**](https://github.com/WhiteRafalicu/spotify-reimagined) por [WhiteRafalicu](https://github.com/WhiteRafalicu), adaptado por [**BrianXDGPRO**](https://github.com/BrianXDGPRO/navidrome-shelf) para funcionar directamente en cualquier navegador conectado a **Navidrome** sin depender de Spotify ni de Spicetify.
 
-Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes de madera como cajas acrílicas reales (*jewel cases*) con refracción e iluminación art déco. Pasa el cursor sobre un disco y se deslizará hacia afuera mostrando su portada en alta definición; haz clic en él y se abrirá frente a ti: la portada es el libreto (*booklet*) con la lista de canciones, notas del álbum y letras sincronizadas, mientras el disco gira al reproducirse. Baja hasta el final del estante para llegar al rincón con una TV CRT Sony PVM, una PlayStation 1 interactiva y una pizarra acrílica que escribe la letra de la canción en tiempo real con plumón.
+Tus álbumes, playlists y canciones favoritas se muestran en estantes de madera como cajas acrílicas con refracción e iluminación art déco. Pasa el cursor sobre un disco y se deslizará hacia afuera mostrando su portada en alta definición; haz clic en él y se abrirá frente a ti: la portada es el libreto (*booklet*) con la lista de canciones, notas del álbum y letras sincronizadas, mientras el disco gira al reproducirse. Baja hasta el final del estante para llegar al rincón con una TV CRT Sony PVM, una PlayStation 1 interactiva y una pizarra acrílica que escribe la letra de la canción en tiempo real.
 
-![El rincón de la TV: monitor Sony PVM, PlayStation 1 y pizarra con la letra escrita a mano](3.png)
+![Monitor Sony PVM, PlayStation 1 y pizarra con las letras](3.png)
 
 | | |
 | --- | --- |
-| ![El estante: cajas de CD en estantes de nogal, separadores y portada HD al pasar el cursor](1.png) | ![Caja abierta: lista de canciones en el libreto, controles integrados y el disco girando](2.png) |
-| Tu biblioteca de Navidrome en el estante, con separadores y portadas HD al pasar el cursor | Abre un disco: reproduce, activa aleatorio o mételo directamente en la PlayStation |
+| ![El estante: cajas de CD en estantes de nogal, separadores y portada al pasar el cursor](1.png) | ![Caja abierta: lista de canciones en el libreto, controles integrados y el disco girando](2.png) |
+| Tu biblioteca de Navidrome en el estante, con separadores y portadas al pasar el cursor | Abre un disco: reproduce, activa aleatorio o mételo directamente en la PlayStation |
 
 ---
 
