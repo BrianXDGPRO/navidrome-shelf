@@ -263,10 +263,24 @@
     }
     if (Array.isArray(starred2.song)) {
       starredMeta.songCounts.clear();
+      const starredIds = new Set();
       for (const s of starred2.song) {
+        if (s?.id != null) {
+          const sid = String(s.id);
+          starredIds.add(sid);
+          if (!songStarPending.has(sid)) {
+            songStarServer.set(sid, true);
+            songStarConfirmed.add(sid);
+          }
+        }
         if (s?.albumId) {
           const aid = String(s.albumId);
           starredMeta.songCounts.set(aid, (starredMeta.songCounts.get(aid) || 0) + 1);
+        }
+      }
+      for (const [sid] of songStarServer) {
+        if (!songStarPending.has(sid) && !starredIds.has(sid)) {
+          songStarServer.set(sid, false);
         }
       }
     }
@@ -274,6 +288,7 @@
 
   function cacheTrack(t, albumFallback = {}) {
     if (!t?.id) return;
+    if (!songStarConfirmed.has(String(t.id))) songStarServer.set(String(t.id), !!t.starred);
     trackMetaCache.set(String(t.id), {
       id: String(t.id),
       uri: `spotify:track:${t.id}`,
@@ -284,6 +299,97 @@
       coverArt: t.coverArt || albumFallback.coverArt || albumFallback.id || "",
       durationMs: (Number(t.duration) || 0) * 1000,
     });
+  }
+
+  // Song favorites (Subsonic star/unstar). `songStarServer` mirrors the last known server
+  // state; cached album/playlist payloads can be stale, so a local toggle always wins until
+  // the server confirms it, and the current song is re-checked with getSong on track change.
+  const songStarServer = new Map();
+  const songStarConfirmed = new Set();
+  const songStarOverride = new Map();
+  const songStarPending = new Set();
+  let lastStarSyncId = null;
+
+  function isSongStarred(id) {
+    const key = String(id);
+    if (songStarOverride.has(key)) return songStarOverride.get(key);
+    return !!songStarServer.get(key);
+  }
+
+  async function refreshSongStar(id) {
+    try {
+      const sr = await subsonicGet("getSong", { id });
+      if (sr?.song && !songStarPending.has(id)) {
+        songStarServer.set(id, !!sr.song.starred);
+        songStarConfirmed.add(id);
+        songStarOverride.delete(id);
+        updateStarButton();
+      }
+    } catch {}
+  }
+
+  function updateStarButton() {
+    if (!npElements?.like) return;
+    const cur = currentTrackObj();
+    const btn = npElements.like;
+    if (!cur || !authState) {
+      btn.disabled = true;
+      btn.classList.remove("is-starred", "is-pending");
+      btn.setAttribute("aria-pressed", "false");
+      btn.title = "Agregar a favoritos";
+      btn.setAttribute("aria-label", "Agregar a favoritos");
+      setIcon(btn, "heart");
+      lastStarSyncId = null;
+      return;
+    }
+    if (cur.id !== lastStarSyncId) {
+      lastStarSyncId = cur.id;
+      refreshSongStar(cur.id);
+    }
+    const starred = isSongStarred(cur.id);
+    btn.disabled = false;
+    btn.classList.toggle("is-starred", starred);
+    btn.classList.toggle("is-pending", songStarPending.has(cur.id));
+    btn.setAttribute("aria-pressed", String(starred));
+    const label = starred ? "Quitar de favoritos" : "Agregar a favoritos";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    setIcon(btn, starred ? "heartFilled" : "heart");
+  }
+
+  async function toggleCurrentStar() {
+    const cur = currentTrackObj();
+    if (!cur || !authState || songStarPending.has(cur.id)) return;
+    const id = String(cur.id);
+    const prev = isSongStarred(id);
+    const next = !prev;
+    songStarOverride.set(id, next);
+    songStarPending.add(id);
+    updateStarButton();
+    try {
+      await subsonicGet(next ? "star" : "unstar", { id });
+      songStarServer.set(id, next);
+      songStarConfirmed.add(id);
+      if (cur.albumId) {
+        const aid = String(cur.albumId);
+        const prevCount = starredMeta.songCounts.get(aid) || 0;
+        const nextCount = Math.max(0, prevCount + (next ? 1 : -1));
+        if (nextCount > 0) starredMeta.songCounts.set(aid, nextCount);
+        else starredMeta.songCounts.delete(aid);
+        const cachedAlbum = albumCache.get(aid);
+        const cachedSong = cachedAlbum?.song?.find((s) => String(s?.id) === id);
+        if (cachedSong) {
+          if (next) cachedSong.starred = new Date().toISOString();
+          else delete cachedSong.starred;
+        }
+      }
+    } catch (e) {
+      console.warn("[cd-shelf] favorito", e);
+    } finally {
+      songStarOverride.delete(id);
+      songStarPending.delete(id);
+      updateStarButton();
+    }
   }
 
   function mapSubsonicTrack(s, at = 0, extra = {}) {
@@ -693,6 +799,7 @@
     if (kind === "user") {
       // Liked / Starred songs
       const sr = await subsonicGet("getStarred2");
+      recordStarredData(sr?.starred2);
       const songs = sr.starred2?.song || [];
       songs.forEach((s) => cacheTrack(s, {}));
       return {
@@ -1738,6 +1845,24 @@ html, body {
 .cds-nd-dot.is-off {
   background: #ff5555;
 }
+.cds-np-like {
+  flex: none;
+}
+.cds-np-like.is-starred {
+  color: #1ed760;
+}
+.cds-np-like.is-starred:hover {
+  color: #3be477;
+}
+.cds-np-like:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+}
+.cds-np-like.is-pending {
+  opacity: 0.6;
+  pointer-events: none;
+}
 
 /* Navidrome Login Modal */
 .cds-auth-backdrop {
@@ -1837,6 +1962,12 @@ html, body {
     volMute: svg(
       '<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
     ),
+    heart: svg(
+      '<path d="M12 20.2s-7.6-4.6-9.5-9.3C1.2 7.6 3.3 4.3 6.8 4.3c2.1 0 3.6 1.1 5.2 3.1 1.6-2 3.1-3.1 5.2-3.1 3.5 0 5.6 3.3 4.3 6.6-1.9 4.7-9.5 9.3-9.5 9.3z"/>'
+    ),
+    heartFilled: svg(
+      '<path d="M12 20.2s-7.6-4.6-9.5-9.3C1.2 7.6 3.3 4.3 6.8 4.3c2.1 0 3.6 1.1 5.2 3.1 1.6-2 3.1-3.1 5.2-3.1 3.5 0 5.6 3.3 4.3 6.6-1.9 4.7-9.5 9.3-9.5 9.3z" fill="currentColor"/>'
+    ),
   };
   const setIcon = (el, name) => {
     if (el && el.dataset.icon !== name) {
@@ -1884,6 +2015,7 @@ html, body {
               authState ? `Conectado a ${authState.serverUrl}` : "Sin conectar a Navidrome"
             }</div>
           </div>
+          <button type="button" class="cds-np-btn cds-np-like" id="cds-np-like" title="Agregar a favoritos" aria-label="Agregar a favoritos" aria-pressed="false" data-icon="heart" disabled>${NP_ICONS.heart}</button>
         </div>
         <div class="cds-np-center">
           <div class="cds-np-btns">
@@ -1914,6 +2046,7 @@ html, body {
       img: document.getElementById("cds-np-img"),
       title: document.getElementById("cds-np-title"),
       artist: document.getElementById("cds-np-artist"),
+      like: document.getElementById("cds-np-like"),
       shuffle: document.getElementById("cds-np-shuffle"),
       prev: document.getElementById("cds-np-prev"),
       play: document.getElementById("cds-np-play"),
@@ -1987,6 +2120,7 @@ html, body {
       Spicetify.Player.setVolume(Number(e.target.value));
     });
     npElements.ndBtn.addEventListener("click", () => openLoginModal());
+    npElements.like.addEventListener("click", () => toggleCurrentStar());
     npElements.title.addEventListener("click", () => {
       const cur = currentTrackObj();
       if (!cur) return;
@@ -2067,6 +2201,7 @@ html, body {
     setIcon(npElements.volIcon, volIconName(vol));
     npElements.ndDot.classList.toggle("is-off", !authState);
     npElements.ndUser.textContent = authState ? authState.username : "Conectar Navidrome";
+    updateStarButton();
     updateProgressBarOnly();
   }
 
