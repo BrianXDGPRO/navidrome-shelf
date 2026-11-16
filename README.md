@@ -15,7 +15,7 @@ Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes d
 
 ---
 
-## ✨ Novedades y mejoras frente al proyecto original
+## Novedades y mejoras frente al proyecto original
 
 1. **Aplicación Web Standalone conectada a Navidrome / Subsonic API (`extension.js` + `index.html`)**
    - No requiere Spotify Desktop ni Spicetify: corre directamente en cualquier navegador moderno como aplicación web o PWA.
@@ -41,7 +41,7 @@ Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes d
 
 ---
 
-## 🚀 Cómo ejecutarlo o desplegarlo
+## Cómo ejecutarlo o desplegarlo
 
 Al ser una aplicación web estática (HTML + JS + CSS), puedes abrirla con cualquier servidor HTTP local o alojarla en GitHub Pages, Cloudflare Pages, Vercel, Nginx o Docker.
 
@@ -64,7 +64,7 @@ Abre `http://localhost:8080` en tu navegador, introduce la URL de tu servidor **
 
 ---
 
-## 🎮 Controles e interacciones
+## Controles e interacciones
 
 | Acción | Resultado |
 | --- | --- |
@@ -92,7 +92,7 @@ Abre `http://localhost:8080` en tu navegador, introduce la URL de tu servidor **
 
 ---
 
-## 📁 Estructura de archivos principales
+## Estructura de archivos principales
 
 * [`index.html`](index.html): Punto de entrada HTML5 y carga de React 18 + scripts del estante.
 * [`extension.js`](extension.js): Cliente **Navidrome / Subsonic / OpenSubsonic API**, autenticación MD5/JWT, caché de biblioteca, motor de audio HTML5, buscador de letras (OpenSubsonic + Subsonic + LRCLIB) y barra de reproducción inferior interactiva.
@@ -101,7 +101,7 @@ Abre `http://localhost:8080` en tu navegador, introduce la URL de tu servidor **
 
 ---
 
-## 🙌 Créditos
+## Créditos
 
 * **Adaptación a Navidrome y mejoras**: [**BrianXDGPRO**](https://github.com/BrianXDGPRO/navidrome-shelf).
 * **Proyecto original (`spotify-reimagined`)**: [**WhiteRafalicu**](https://github.com/WhiteRafalicu/spotify-reimagined).
@@ -113,6 +113,6 @@ Abre `http://localhost:8080` en tu navegador, introduce la URL de tu servidor **
   * `table.glb`: [table_d from FPS Creator Classic](https://sketchfab.com/3d-models/table-d-from-fps-creator-classic-ef3b5348530448289083e82251233aaa) por `Garbage Raccoon` (CC BY 4.0)
   * Fuentes: [Permanent Marker](https://fonts.google.com/specimen/Permanent+Marker) (Apache 2.0) y [Pangolin](https://fonts.google.com/specimen/Pangolin) (SIL OFL 1.1).
 
-## 📄 Licencia
+## Licencia
 
 El código de este repositorio se distribuye bajo la licencia **MIT**. Los modelos 3D y fuentes mantienen sus respectivas licencias originales indicadas arriba.
