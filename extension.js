@@ -1281,28 +1281,54 @@ html, body {
   appearance: none;
   border: 0;
   background: none;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  font-size: 15px;
-  padding: 6px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   transition: color 0.15s, transform 0.1s;
+}
+.cds-np-btn svg,
+.cds-np-volicon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .cds-np-btn:hover {
   color: #fff;
 }
+.cds-np-btn:active {
+  transform: scale(0.94);
+}
 .cds-np-btn.is-active {
   color: #1ed760;
+}
+.cds-np-btn.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .cds-np-btn.is-play {
   width: 36px;
   height: 36px;
   background: #fff;
   color: #000;
-  font-size: 14px;
 }
 .cds-np-btn.is-play:hover {
   transform: scale(1.06);
@@ -1330,6 +1356,12 @@ html, body {
   gap: 12px;
   min-width: 200px;
   flex: 1;
+}
+.cds-np-volicon {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.7);
+  margin-right: -4px;
 }
 .cds-np-vol {
   width: 90px;
@@ -1437,6 +1469,40 @@ html, body {
 }
 `;
 
+  // Line icons for the player bar (stroke = currentColor; filled shapes set their own fill).
+  const svg = (body) => `<svg viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
+  const NP_ICONS = {
+    shuffle: svg(
+      '<path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>'
+    ),
+    prev: svg('<path d="M19 20 9 12l10-8z" fill="currentColor"/><path d="M5 19V5"/>'),
+    next: svg('<path d="M5 4l10 8-10 8z" fill="currentColor"/><path d="M19 5v14"/>'),
+    play: svg('<path d="M8 4.8v14.4a.8.8 0 0 0 1.2.7l11.5-7.2a.8.8 0 0 0 0-1.4L9.2 4.1A.8.8 0 0 0 8 4.8z" fill="currentColor" stroke="none"/>'),
+    pause: svg(
+      '<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>'
+    ),
+    repeat: svg(
+      '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'
+    ),
+    repeatOne: svg(
+      '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/>'
+    ),
+    volHigh: svg(
+      '<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>'
+    ),
+    volLow: svg('<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>'),
+    volMute: svg(
+      '<path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
+    ),
+  };
+  const setIcon = (el, name) => {
+    if (el && el.dataset.icon !== name) {
+      el.dataset.icon = name;
+      el.innerHTML = NP_ICONS[name];
+    }
+  };
+  const volIconName = (v) => (v <= 0.001 ? "volMute" : v < 0.5 ? "volLow" : "volHigh");
+
   function fmtTime(ms) {
     const s = Math.max(0, Math.floor((ms || 0) / 1000));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -1478,11 +1544,11 @@ html, body {
         </div>
         <div class="cds-np-center">
           <div class="cds-np-btns">
-            <button type="button" class="cds-np-btn" id="cds-np-shuffle" title="Aleatorio">⇄</button>
-            <button type="button" class="cds-np-btn" id="cds-np-prev" title="Anterior">⏮</button>
-            <button type="button" class="cds-np-btn is-play" id="cds-np-play" title="Reproducir / Pausar">▶</button>
-            <button type="button" class="cds-np-btn" id="cds-np-next" title="Siguiente">⏭</button>
-            <button type="button" class="cds-np-btn" id="cds-np-repeat" title="Repetir">🔁</button>
+            <button type="button" class="cds-np-btn" id="cds-np-shuffle" title="Aleatorio" aria-label="Aleatorio">${NP_ICONS.shuffle}</button>
+            <button type="button" class="cds-np-btn" id="cds-np-prev" title="Anterior" aria-label="Anterior">${NP_ICONS.prev}</button>
+            <button type="button" class="cds-np-btn is-play" id="cds-np-play" title="Reproducir / Pausar" aria-label="Reproducir / Pausar" data-icon="play">${NP_ICONS.play}</button>
+            <button type="button" class="cds-np-btn" id="cds-np-next" title="Siguiente" aria-label="Siguiente">${NP_ICONS.next}</button>
+            <button type="button" class="cds-np-btn" id="cds-np-repeat" title="Repetir" aria-label="Repetir" data-icon="repeat">${NP_ICONS.repeat}</button>
           </div>
           <div class="cds-np-bar-row">
             <span id="cds-np-cur">0:00</span>
@@ -1491,7 +1557,7 @@ html, body {
           </div>
         </div>
         <div class="cds-np-right">
-          <span style="font-size:13px;opacity:0.7">🔊</span>
+          <span class="cds-np-volicon" id="cds-np-volicon" data-icon="${volIconName(audio.volume)}">${NP_ICONS[volIconName(audio.volume)]}</span>
           <input type="range" class="cds-np-vol" id="cds-np-vol" min="0" max="1" step="0.02" value="${audio.volume}" />
           <button type="button" class="cds-nd-badge" id="cds-nd-btn" title="Configurar servidor Navidrome">
             <span class="cds-nd-dot ${authState ? "" : "is-off"}" id="cds-nd-dot"></span>
@@ -1514,6 +1580,7 @@ html, body {
       seek: document.getElementById("cds-np-seek"),
       dur: document.getElementById("cds-np-dur"),
       vol: document.getElementById("cds-np-vol"),
+      volIcon: document.getElementById("cds-np-volicon"),
       ndBtn: document.getElementById("cds-nd-btn"),
       ndDot: document.getElementById("cds-nd-dot"),
       ndUser: document.getElementById("cds-nd-user"),
@@ -1602,12 +1669,15 @@ html, body {
       npElements.artist.classList.remove("is-clickable");
       npElements.artist.removeAttribute("title");
     }
-    npElements.play.textContent = playing ? "⏸" : "▶";
+    setIcon(npElements.play, playing ? "pause" : "play");
     npElements.shuffle.classList.toggle("is-active", Spicetify.Player.getShuffle());
     const rep = Spicetify.Player.getRepeat();
     npElements.repeat.classList.toggle("is-active", rep > 0);
-    npElements.repeat.textContent = rep === 2 ? "🔂" : "🔁";
-    npElements.vol.value = String(Spicetify.Player.getVolume());
+    setIcon(npElements.repeat, rep === 2 ? "repeatOne" : "repeat");
+    npElements.repeat.title = rep === 2 ? "Repetir una" : rep === 1 ? "Repetir todo" : "Repetir";
+    const vol = Spicetify.Player.getVolume();
+    npElements.vol.value = String(vol);
+    setIcon(npElements.volIcon, volIconName(vol));
     npElements.ndDot.classList.toggle("is-off", !authState);
     npElements.ndUser.textContent = authState ? authState.username : "Conectar Navidrome";
     updateProgressBarOnly();

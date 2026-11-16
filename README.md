@@ -5,12 +5,12 @@ Tu biblioteca de **Navidrome** (y servidores compatibles con **Subsonic / OpenSu
 
 Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes de madera como cajas acrílicas reales (*jewel cases*) con refracción e iluminación art déco. Pasa el cursor sobre un disco y se deslizará hacia afuera mostrando su portada en alta definición; haz clic en él y se abrirá frente a ti: la portada es el libreto (*booklet*) con la lista de canciones, notas del álbum y letras sincronizadas, mientras el disco gira al reproducirse. Baja hasta el final del estante para llegar al rincón con una TV CRT Sony PVM, una PlayStation 1 interactiva y una pizarra acrílica que escribe la letra de la canción en tiempo real con plumón.
 
-![The TV corner: a Sony PVM monitor, a PlayStation, and a whiteboard writing out the lyrics](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/tv-corner.jpg)
+![El rincón de la TV: monitor Sony PVM, PlayStation 1 y pizarra con la letra escrita a mano](3.png)
 
 | | |
 | --- | --- |
-| ![The shelf: jewel cases spine-out on walnut shelves, sorted by year behind divider cards, playlists as handwritten CD-Rs](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/shelf.jpg) | ![An open jewel case: the tracklist printed in the booklet with shuffle, play and skip beside the title, and the disc in the tray](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/open-case.jpg) |
-| Tu biblioteca de Navidrome en el estante, con separadores y playlists como CD-Rs escritos a mano | Abre un disco: reproduce, activa aleatorio o mételo directamente en la PlayStation |
+| ![El estante: cajas de CD en estantes de nogal, separadores y portada HD al pasar el cursor](1.png) | ![Caja abierta: lista de canciones en el libreto, controles integrados y el disco girando](2.png) |
+| Tu biblioteca de Navidrome en el estante, con separadores y portadas HD al pasar el cursor | Abre un disco: reproduce, activa aleatorio o mételo directamente en la PlayStation |
 
 ---
 
@@ -22,7 +22,8 @@ Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes d
    - **Motor de audio HTML5 integrado** con cola de reproducción, modo aleatorio (*shuffle*), repetición (desactivado / contexto / una canción), control de volumen persistente, integración con **MediaSession API** (controles multimedia del sistema operativo) y **Scrobbling** en tiempo real hacia Navidrome (`now playing` y reproducción completada).
    - **Triple fuente de letras sincronizadas**: soporte nativo para **OpenSubsonic** (`getLyricsBySongId`), API clásica de Subsonic (`getLyrics`) y respaldo automático con **LRCLIB** (`lrclib.net`) para letras sincronizadas línea por línea (`.lrc`).
 
-2. **Mini reproductor inferior interactivo**
+2. **Mini reproductor inferior interactivo y limpio**
+   - **Iconos vectoriales SVG uniformes**: controles de reproducción (`aleatorio`, `anterior`, `reproducir/pausar`, `siguiente`, `repetir` / `repetir una`) y volumen dinámico (`alto`, `bajo`, `silencio`) con indicador de estado estilo Spotify.
    - **Clic en la portada**: abre directamente la vista 3D de la caja abierta del CD con el disco girando y la lista de canciones (tanto en modo disco redondo como en modo portada cuadrada).
    - **Clic en el título de la canción**: cierra cualquier vista superpuesta, limpia filtros si el disco estaba oculto y desplaza la cámara del estante 3D directamente hasta la fila exacta del disco, sacándolo ligeramente e iluminándolo.
    - **Clic en el artista**: filtra automáticamente el estante mostrando únicamente los discos de ese artista y sube al inicio del estante.
