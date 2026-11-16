@@ -1,5 +1,4 @@
-# Navidrome Shelf (`navidrome-reimagined`)
-
+# Navidrome Shelf
 Tu biblioteca de **Navidrome** (y servidores compatibles con **Subsonic / OpenSubsonic API**) como un estante interactivo de CDs en 3D para la web, construido con **Three.js** y **React**.
 
 > Este proyecto es un fork y adaptación web independiente (*standalone*) de [**Spotify Reimagined**](https://github.com/WhiteRafalicu/spotify-reimagined) por [WhiteRafalicu](https://github.com/WhiteRafalicu), adaptado por [**BrianXDGPRO**](https://github.com/BrianXDGPRO/navidrome-shelf) para funcionar directamente en cualquier navegador conectado a **Navidrome** sin depender de Spotify ni de Spicetify.
