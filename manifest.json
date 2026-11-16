@@ -1,16 +1,27 @@
 {
-  "name": "CD Shelf",
-  "description": "Your Spotify library as a shelf of 3D CDs: open a disc to see its tracklist and lyrics, and play it in the PlayStation under a CRT TV.",
+  "name": "CD Shelf for Navidrome",
+  "short_name": "CD Shelf",
+  "description": "Your Navidrome library as a shelf of 3D CDs: open a disc to see its tracklist and lyrics, and play it in the PlayStation under a CRT TV.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0e0d0c",
+  "theme_color": "#0e0d0c",
   "preview": "docs/screenshots/tv-corner.jpg",
   "readme": "README.md",
   "authors": [
     {
+      "name": "BrianXDGPRO",
+      "url": "https://github.com/BrianXDGPRO/navidrome-shelf"
+    },
+    {
       "name": "WhiteRafalicu",
-      "url": "https://github.com/WhiteRafalicu"
+      "url": "https://github.com/WhiteRafalicu/spotify-reimagined"
     }
   ],
   "tags": [
     "3D",
+    "navidrome",
+    "subsonic",
     "library",
     "lyrics"
   ],

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CD Shelf · Navidrome</title>
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#0e0d0c" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231ed760'%3E%3Cpath fill-rule='evenodd' d='M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm0 7.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z'/%3E%3C/svg%3E"
+    />
+    <!-- React 18 & ReactDOM 18 for CD Shelf UI -->
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  </head>
+  <body class="cds-disc cds-hide-sidebar">
+    <div class="Root__top-container">
+      <main class="Root__main-view"></main>
+    </div>
+    <div id="cds-mount"></div>
+    <script src="./extension.js"></script>
+    <script src="./index.js"></script>
+  </body>
+</html>

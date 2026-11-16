@@ -1,224 +1,118 @@
-# Spotify Reimagined
+# Navidrome Shelf (`navidrome-reimagined`)
 
-Your Spotify library as a shelf of CDs. A [Spicetify](https://spicetify.app) custom app for the
-Spotify desktop app, built with three.js.
+Tu biblioteca de **Navidrome** (y servidores compatibles con **Subsonic / OpenSubsonic API**) como un estante interactivo de CDs en 3D para la web, construido con **Three.js** y **React**.
 
-Your saved albums and playlists stand spine-out on walnut shelves, as real refracting jewel cases
-under art deco lighting. Hover one and it slides out to show its cover; click it and it rises off the
-shelf and swings open: the cover is the booklet, the tracklist is printed inside it, and the disc
-spins while it plays. Scroll past the last shelf to a table where an old TV plays the song's Canvas
-video and a whiteboard writes out the lyrics in marker, in time with the music.
+> Este proyecto es un fork y adaptación web independiente (*standalone*) de [**Spotify Reimagined**](https://github.com/WhiteRafalicu/spotify-reimagined) por [WhiteRafalicu](https://github.com/WhiteRafalicu), adaptado por [**BrianXDGPRO**](https://github.com/BrianXDGPRO/navidrome-shelf) para funcionar directamente en cualquier navegador conectado a **Navidrome** sin depender de Spotify ni de Spicetify.
 
-![The TV corner: a Sony PVM monitor showing the song's video, a PlayStation, and a whiteboard writing out the lyrics](docs/screenshots/tv-corner.jpg)
+Tus álbumes, playlists y canciones favoritas se muestran de canto en estantes de madera como cajas acrílicas reales (*jewel cases*) con refracción e iluminación art déco. Pasa el cursor sobre un disco y se deslizará hacia afuera mostrando su portada en alta definición; haz clic en él y se abrirá frente a ti: la portada es el libreto (*booklet*) con la lista de canciones, notas del álbum y letras sincronizadas, mientras el disco gira al reproducirse. Baja hasta el final del estante para llegar al rincón con una TV CRT Sony PVM, una PlayStation 1 interactiva y una pizarra acrílica que escribe la letra de la canción en tiempo real con plumón.
+
+![The TV corner: a Sony PVM monitor, a PlayStation, and a whiteboard writing out the lyrics](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/tv-corner.jpg)
 
 | | |
 | --- | --- |
-| ![The shelf: jewel cases spine-out on walnut shelves, sorted by year behind divider cards, playlists as handwritten CD-Rs](docs/screenshots/shelf.jpg) | ![An open jewel case: the tracklist printed in the booklet with shuffle, play and skip beside the title, and the disc in the tray](docs/screenshots/open-case.jpg) |
-| Your library on the shelf, with record-store dividers and CD-R playlists | Open a disc: play, shuffle or skip from the booklet, or drop it in the PlayStation |
-| ![The booklet's Notes page: release date, label, length and copyright lines](docs/screenshots/notes.jpg) | |
-| Turn the booklet's pages: tracks, liner notes, lyrics | |
+| ![The shelf: jewel cases spine-out on walnut shelves, sorted by year behind divider cards, playlists as handwritten CD-Rs](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/shelf.jpg) | ![An open jewel case: the tracklist printed in the booklet with shuffle, play and skip beside the title, and the disc in the tray](https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/docs/screenshots/open-case.jpg) |
+| Tu biblioteca de Navidrome en el estante, con separadores y playlists como CD-Rs escritos a mano | Abre un disco: reproduce, activa aleatorio o mételo directamente en la PlayStation |
 
-## Install
+---
 
-You need the Spotify desktop app with [Spicetify](https://spicetify.app/docs/getting-started)
-installed. Then run one line:
+## ✨ Novedades y mejoras frente al proyecto original
 
-**Linux / macOS**
+1. **Aplicación Web Standalone conectada a Navidrome / Subsonic API (`extension.js` + `index.html`)**
+   - No requiere Spotify Desktop ni Spicetify: corre directamente en cualquier navegador moderno como aplicación web o PWA.
+   - **Autenticación integrada con Navidrome** (`/auth/login` y fallback estándar Subsonic `MD5(password + salt)` v1.16.1) con persistencia de sesión en `localStorage`.
+   - **Motor de audio HTML5 integrado** con cola de reproducción, modo aleatorio (*shuffle*), repetición (desactivado / contexto / una canción), control de volumen persistente, integración con **MediaSession API** (controles multimedia del sistema operativo) y **Scrobbling** en tiempo real hacia Navidrome (`now playing` y reproducción completada).
+   - **Triple fuente de letras sincronizadas**: soporte nativo para **OpenSubsonic** (`getLyricsBySongId`), API clásica de Subsonic (`getLyrics`) y respaldo automático con **LRCLIB** (`lrclib.net`) para letras sincronizadas línea por línea (`.lrc`).
+
+2. **Mini reproductor inferior interactivo**
+   - **Clic en la portada**: abre directamente la vista 3D de la caja abierta del CD con el disco girando y la lista de canciones (tanto en modo disco redondo como en modo portada cuadrada).
+   - **Clic en el título de la canción**: cierra cualquier vista superpuesta, limpia filtros si el disco estaba oculto y desplaza la cámara del estante 3D directamente hasta la fila exacta del disco, sacándolo ligeramente e iluminándolo.
+   - **Clic en el artista**: filtra automáticamente el estante mostrando únicamente los discos de ese artista y sube al inicio del estante.
+
+3. **Portadas HD dinámicas (600×600) al hacer hover o seleccionar en el estante**
+   - Para mantener un rendimiento fluido en bibliotecas grandes (+2,000 discos), el estante utiliza texturas ligeras de `128×128` en el `DataArrayTexture` general, pero carga dinámicamente al instante una textura **HD de 600×600** (`uHdTex` / `uHdLayer`) para el disco que tienes seleccionado o bajo el cursor.
+
+4. **Navegación directa entre el estante y la PlayStation 1**
+   - Botón dedicado en el encabezado (**"Ir a la PS1"** / **"Ir al estante"**) que alterna dinámicamente según la posición de la cámara para bajar al rincón de la consola o regresar arriba con un clic.
+
+5. **Correcciones gráficas y de carga en bibliotecas grandes**
+   - **Fix de subida parcial en `DataArrayTexture` (WebGL2)**: solucionado un bug en el que al redimensionarse el pool de instancias (`C0`) en el mismo frame en que se actualizaban capas individuales (`layerUpdates`), la GPU dejaba capas en negro/vacías permanentemente.
+   - **Priorización de cola de descargas en pantalla y caché ampliada (`4096` discos)**: al hacer scroll rápido en bibliotecas de miles de álbumes, las descargas de portadas que ya salieron de cámara se descartan para priorizar las filas visibles, reciclando primero los slots fuera de pantalla.
+   - **Corrección de iluminación, niebla y legibilidad en el tema claro (*Abedul / Birch*) y paredes claras (`#ece8e1`, `#cfc6b8`)**: ajustada la distancia dinámica de la niebla (`fog`) y desactivada sobre el rincón de la TV, la consola y la pizarra para evitar que el texto del plumón o el monitor Sony PVM se vieran lavados.
+
+---
+
+## 🚀 Cómo ejecutarlo o desplegarlo
+
+Al ser una aplicación web estática (HTML + JS + CSS), puedes abrirla con cualquier servidor HTTP local o alojarla en GitHub Pages, Cloudflare Pages, Vercel, Nginx o Docker.
+
+### Opción 1: Servidor local rápido con Python o Node.js
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/install.sh | sh
+git clone https://github.com/BrianXDGPRO/navidrome-shelf.git
+cd navidrome-shelf
+
+# Con Python 3:
+python3 -m http.server 8080
+
+# O con Node.js:
+npx serve -l 8080
 ```
 
-**Windows** (PowerShell)
+Abre `http://localhost:8080` en tu navegador, introduce la URL de tu servidor **Navidrome**, tu usuario y contraseña, ¡y tu estante cargará automáticamente!
 
-```powershell
-iwr -useb https://raw.githubusercontent.com/WhiteRafalicu/spotify-reimagined/main/install.ps1 | iex
-```
+> **Nota sobre CORS:** Si alojas `navidrome-shelf` en un dominio distinto al de tu servidor Navidrome, asegúrate de que tu servidor Navidrome permita peticiones CORS desde ese origen (la API `/rest/*` de Navidrome incluye cabeceras CORS por defecto).
 
-Spotify restarts and opens on the shelf. To uninstall:
+---
 
-```bash
-spicetify config custom_apps cd-shelf-
-spicetify apply
-```
+## 🎮 Controles e interacciones
 
-## What it does
-
-| Do this | And this happens |
+| Acción | Resultado |
 | --- | --- |
-| Hover a spine | The case slides out and turns to show its cover |
-| Click a spine | Pull the case out and open it |
-| Click a track on the booklet | Play the album or playlist from that track (long lists scroll) |
-| **Tracks · Notes · Lyrics** at the foot of the booklet | Turn the page: liner notes (release, label, ℗/©; a playlist's description and maker) and the lyrics, lit line by line as it plays |
-| Click the disc | Play or pause (it spins while it plays) |
-| **Shuffle · Play · Skip · Repeat** on the booklet, right of the title | Play it shuffled (or toggle shuffle while it plays) · play or pause · next track · repeat off / all / one |
-| Drag the case | Turn it |
-| Click outside the case or press **Esc** | Put it back |
-| Hover the TV | Its screen shows controls: previous, play/pause, next and a seek bar |
-| **Play in the console** (on an open case) | The camera glides to the TV corner and the disc goes into the PlayStation, which then plays it |
-| The cases piled beside the TV | **Up next**: the next tracks in your queue, the next on top; click one to play it now |
-| Click the PlayStation | Open its lid to see the disc (pauses the music); click again to close it and play on |
-| The monitor's front panel | **VOL ±** sets Spotify's volume; **BRIGHT, CONTRAST, CHROMA, PHASE, APERTURE ±** adjust the picture (kept between sessions, **RESET** undoes them); **POWER** turns the picture off and on |
-| Click a control on the TV / elsewhere on the TV | Do that / play or pause |
-| **Fullscreen** in the header, or **T** | TV mode: the TV and the whiteboard fill the screen (full screen where Spotify allows); **Esc** to leave |
-| **Ctrl** + scroll (or pinch) | Zoom in where the pointer is, to read the spines; **Esc** zooms back out |
-| Arrow keys / Page Up / Page Down / Home / End | Move between discs (no need to click the shelf first) |
-| **← / →** in an open case | Put it back and open the previous / next disc |
-| **Enter** or **Space** | Open the selected disc |
+| **Pasar el cursor sobre un lomo** | La caja se desliza hacia afuera y gira mostrando su portada en **HD (600×600)** |
+| **Clic en un disco del estante** | Saca la caja del estante y la abre frente a ti |
+| **Clic en una canción del libreto** | Reproduce el álbum o playlist desde esa pista (las listas largas tienen scroll) |
+| **Canciones · Notas · Letra** (abajo en el libreto) | Cambia de página: lista de canciones, notas de edición (fecha, sello, géneros, número de discos) y letra sincronizada |
+| **Clic en el disco dentro de la caja** | Reproduce o pausa (el disco gira mientras suena) |
+| **Aleatorio · Reproducir · Siguiente · Repetir** | Controles integrados en la parte superior del libreto |
+| **Arrastrar la caja abierta** | Gira la caja 3D libremente |
+| **Clic fuera de la caja o tecla `Esc`** | Cierra la caja y la devuelve a su lugar en el estante |
+| **Poner en la consola** (bajo la caja abierta) | La cámara baja al rincón de la TV, abre la tapa de la PlayStation 1, inserta el CD y comienza a reproducirlo |
+| **Clic en la portada del mini reproductor** | Abre la caja 3D y lista de canciones del disco que está sonando |
+| **Clic en el título en el mini reproductor** | Te lleva directamente a la ubicación exacta de ese disco en el estante |
+| **Clic en el artista en el mini reproductor** | Filtra el estante con todos los discos de ese artista |
+| **Ir a la PS1 / Ir al estante** (en el encabezado) | Desplaza la cámara al rincón de la TV y la PlayStation o de vuelta arriba |
+| **Pasar el cursor sobre la TV CRT** | Muestra los controles en pantalla (anterior, play/pausa, siguiente y barra de progreso) |
+| **Panel frontal del monitor Sony PVM** | **VOL ±** ajusta el volumen; **BRIGHT, CONTRAST, CHROMA, PHASE, APERTURE ±** ajustan la imagen CRT; **RESET** restaura valores; **POWER** apaga/enciende la pantalla |
+| **Clic en la PlayStation 1** | Abre su tapa para ver el disco (pausa la música); haz clic de nuevo para cerrarla y continuar |
+| **Pilas de discos junto a la TV** | **A continuación**: los siguientes discos en la cola; haz clic en uno para saltar a él |
+| **Pantalla completa** o tecla **`T`** | Modo TV: encuadra la TV CRT y la pizarra de letras a pantalla completa (`Esc` para salir) |
+| **`Ctrl` + rueda del ratón** | Hace zoom hacia donde apunte el cursor para leer los lomos (`Esc` para restablecer) |
+| **Flechas / Re Pág / Av Pág / Inicio / Fin** | Navega entre los discos del estante con el teclado (`Enter` o `Espacio` para abrir) |
+| **`←` / `→` con una caja abierta** | Guarda el disco actual y abre el disco anterior o siguiente del estante |
 
-- **Liked Songs** is a gold box set at the front of the shelf: open it for every song you've liked.
-- **The shelf is your library and your home page.** Spotify opens on it; the library sidebar is
-  hidden. "Spotify home" in the header gets you to the original Home.
-- **It stays in sync.** Save an album anywhere in Spotify and its disc slides onto the shelf; remove
-  one and it leaves. Whatever is playing has a green LED on its spine.
-- **The player bar's cover is a spinning CD.** Click it to open that album's case.
-- **The TV corner.** The TV mirrors the Canvas video Spotify shows in its Now Playing sidebar (keep
-  the sidebar open for it), or the cover art, music-channel style, through a CRT effect. The
-  whiteboard shows Spotify's synced lyrics, in any language (right-to-left ones from the right).
-- **Small libraries work too:** a shelf with only a few saved albums is topped up with recently
-  played ones (marked as not saved), and there are always at least three rows of boards.
-- **Shelfie** (📷 in the header): a high-resolution picture of the shelf as you've framed it (scroll, or Ctrl + scroll to zoom), captioned with your name and disc count, to copy or save.
-- **Search, filter and sort** in the header. Playlists without a cover become hand-labelled CD-Rs.
-- **Settings** in the header: switch off any of it (the shelf as Home, the hidden sidebar, the
-  spinning CD, the TV corner), make the cases bigger (**Shelf size**), pick a **look** (Walnut art
-  deco, bright Birch, black Minimal), a **wall colour** and the **case glass** (clear, classic,
-  smoky, blue), how fast cases move (**Animation speed**), whether the camera and cases **sway**,
-  a spotlight follows the pointer, the opened case **glints** and dust drifts in the light, whether
-  the whiteboard writes lyrics out or shows **whole lines**, a **language** and a quality level. Or
-  press **Back to classic Spotify** to undo every change to Spotify's own interface in one click.
-  The shelf stays one click away.
-- **Languages:** English, Română, Español, Deutsch, Français and Português, following Spotify's own
-  language unless you pick one. To add one, copy the `en` block in `src/i18n.js` and translate it.
-- **Quality**, also in Settings: Auto picks a level for your GPU, and the resolution adapts to keep it
-  smooth. See [Performance](#performance).
+---
 
-## Troubleshooting
+## 📁 Estructura de archivos principales
 
-Found a bug? [Open an issue](https://github.com/WhiteRafalicu/spotify-reimagined/issues/new/choose); the form asks for what helps fix it.
+* [`index.html`](index.html): Punto de entrada HTML5 y carga de React 18 + scripts del estante.
+* [`extension.js`](extension.js): Cliente **Navidrome / Subsonic / OpenSubsonic API**, autenticación MD5/JWT, caché de biblioteca, motor de audio HTML5, buscador de letras (OpenSubsonic + Subsonic + LRCLIB) y barra de reproducción inferior interactiva.
+* [`index.js`](index.js): Motor 3D en **Three.js** (estante instanciado, shaders de refracción de cristal acrílico, iluminación art déco, rincón con TV CRT Sony PVM, PlayStation 1 y pizarra de letras) + interfaz React de ajustes, filtros y cámara.
+* [`manifest.json`](manifest.json): Manifiesto de la aplicación web.
 
+---
 
-- **Nothing changed after installing:** run `spicetify apply` again. After Spotify updates itself,
-  run `spicetify backup apply`.
-- **Something stopped working after a Spotify update:** Settings → General → Diagnostics → Copy and
-  paste it into an issue. Developers can run `node tools/smoke.mjs` (Spotify started with
-  `--remote-debugging-port=9222`): a read-only check of every Spotify API the shelf uses.
-- **"WebGL is unavailable":** on Linux with an NVIDIA GPU, hardware video decode can crash Spotify's
-  GPU process and disable WebGL. Start Spotify with `--disable-accelerated-video-decode` (on Arch,
-  put it in `~/.config/spotify-flags.conf`).
-- **Slow:** pick Quality: Low in the header.
-- **The glass shimmers or flickers when the pointer moves:** turn off **Sway** (and **Spotlight
-  follows the pointer**, **Star glints**) in Settings, Motion & light.
-- **"WebGL is unavailable" on Linux with Spotify 1.3 or later under Wayland:** add
-  `--ozone-platform=wayland` to Spotify's flags (on Arch, `~/.config/spotify-flags.conf`).
+## 🙌 Créditos
 
-## Build from source
+* **Adaptación a Navidrome y mejoras**: [**BrianXDGPRO**](https://github.com/BrianXDGPRO/navidrome-shelf).
+* **Proyecto original (`spotify-reimagined`)**: [**WhiteRafalicu**](https://github.com/WhiteRafalicu/spotify-reimagined).
+* **Geometría de la caja de CD y shaders de refracción/difracción**: [cd-case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case) por **Ann Nguyen** ([@ann_nnng](https://x.com/ann_nnng)).
+* **Modelos 3D del rincón de TV y fuentes**:
+  * `pvm_ps1.glb`: [Sony PVM-1341 || Sony Playstation](https://sketchfab.com/3d-models/sony-pvm-1341-sony-playstation-5f80311f1a4646ef9673f20ee6dc6245) por `dark_igorek` (CC BY 4.0)
+  * `whiteboard.glb`: [School whiteboard 90cm × 120cm](https://sketchfab.com/3d-models/school-whiteboard-90cm-x-120cm-280856e261974ed093d9d15892ef045e) por `Pedro-Martins` (CC BY 4.0)
+  * `ashtray.glb`: [Ashtray with Cigarettes](https://sketchfab.com/3d-models/ashtray-with-cigarettes-6e9bfb5e4b1e42b791a51c40cb993306) por `YJ_` (CC BY 4.0)
+  * `table.glb`: [table_d from FPS Creator Classic](https://sketchfab.com/3d-models/table-d-from-fps-creator-classic-ef3b5348530448289083e82251233aaa) por `Garbage Raccoon` (CC BY 4.0)
+  * Fuentes: [Permanent Marker](https://fonts.google.com/specimen/Permanent+Marker) (Apache 2.0) y [Pangolin](https://fonts.google.com/specimen/Pangolin) (SIL OFL 1.1).
 
-```bash
-npm install
-npm run build                     # embeds whatever models are in assets/ (see below)
-mkdir -p "$(dirname "$(spicetify -c)")/CustomApps/cd-shelf"
-cp dist/index.js dist/extension.js dist/manifest.json "$(dirname "$(spicetify -c)")/CustomApps/cd-shelf/"
-spicetify config custom_apps cd-shelf
-spicetify apply
-```
+## 📄 Licencia
 
-Developing (Linux): start Spotify with the DevTools Protocol open, then rebuild and hot-reload it.
-
-```bash
-/opt/spotify/spotify --remote-debugging-port=9222 &   # Spotify with DevTools Protocol open
-node tools/deploy.mjs        # build, splice into Spicetify's route chunk, reload Spotify
-node tools/cdp.mjs eval 'return Spicetify.Player.data.item.name'
-node tools/cdp.mjs shot out.png
-```
-
-- After a Spotify or Spicetify update, `node tools/smoke.mjs` checks every API the shelf relies on (library, GraphQL album/notes/canvas, playlists, lyrics route, covers, player surface, the extension) without playing or changing anything; it exits non-zero on a failure.
-- `src/app.jsx` is the header, the stage overlay and the player wiring.
-- `src/shelf3d.js` is the three.js shelf room (springs, lights, dust, raycast hover). Every case on the shelf is the real cd-case tray and lid (a shelf build of 9k triangles; hovered and pulled cases use the full 40k build), instanced and drawn with the original rod and sheet glass shaders over each case's booklet, spine strip and printed disc. It renders in passes: opaque room, then glass refracting a copy of it, then dust, then tone mapping with a light vignette.
-- Lighting lives in one `LIGHT` block in `src/shelf3d.js`: a warm-neutral directional key (the only shadow caster; 2048 map, PCF radius 9, its camera fitted to the unit and snapped to texels as you scroll), a weak cool fill, and hemisphere plus room-environment ambient. Contact shadows under every case and the creases where boards meet the sides and back are instanced multiply decals (two draws in all). The back panel carries baked compartment occlusion as an `aoMap`. The walnut is procedural: colour and roughness maps, rounded boards, clearcoat.
-- A hovered case slides clear of the row (`CLEAR_Z`) before it turns, and turns square before it slides back, so its 146 mm depth never swings through its neighbours. In DevTools, `__cdShelf.debug()` shows its layout.
-- `src/library.js` reads the library (`LibraryAPI`, GraphQL `queryAlbumTracks`, `PlaylistAPI`) and plays (`Player.playUri` with `skipTo`).
-- `src/stage.js` is the jewel-case renderer: Ann Nguyen's `CaseStage`, rebuilt for one album with a booklet, hit testing and a rise-from-the-shelf entrance.
-- `src/booklet.js` draws the tracklist page and maps clicks back to rows.
-- `src/caseGeometry.js` and `src/shaders.js` come from the original, plus a dark studio, an album-tinted backdrop and the booklet material.
-
-### The TV corner's models
-
-`release-assets/` holds the models that may be shared (with their licences in `release-assets/LICENSES.md`); release builds load them from there through jsDelivr. For your own build, put optimized copies in `assets/` (not committed) and the build embeds them; without them, the shelf builds without the corner. Optimize with:
-
-```bash
-npx gltf-transform optimize in.glb assets/crt_tv.glb --compress meshopt --texture-compress webp --texture-size 512 --simplify false
-# heavier models (ashtray 0.25, whiteboard 0.25):
-npx gltf-transform optimize in.glb out.glb --compress meshopt --texture-compress webp --texture-size 512 --simplify true --simplify-ratio 0.2 --simplify-error 0.002
-```
-
-| File | Model | Author | Licence |
-| --- | --- | --- | --- |
-| `pvm_ps1.glb` | [Sony PVM-1341 &#124;&#124; Sony Playstation](https://sketchfab.com/3d-models/sony-pvm-1341-sony-playstation-5f80311f1a4646ef9673f20ee6dc6245) | dark_igorek | CC BY 4.0 |
-| `whiteboard.glb` | [School whiteboard 90cm × 120cm](https://sketchfab.com/3d-models/school-whiteboard-90cm-x-120cm-280856e261974ed093d9d15892ef045e) | Pedro-Martins | CC BY 4.0 |
-| `ashtray.glb` | [Ashtray with Cigarettes](https://sketchfab.com/3d-models/ashtray-with-cigarettes-6e9bfb5e4b1e42b791a51c40cb993306) | YJ_ | CC BY 4.0 |
-| `table.glb` | [table_d from FPS Creator Classic](https://sketchfab.com/3d-models/table-d-from-fps-creator-classic-ef3b5348530448289083e82251233aaa) | Garbage Raccoon | CC BY 4.0 |
-| `fonts/PermanentMarker-Regular.ttf` | [Permanent Marker](https://fonts.google.com/specimen/Permanent+Marker) | Font Diner | Apache 2.0 |
-| `fonts/Pangolin-Subset.woff2` | [Pangolin](https://fonts.google.com/specimen/Pangolin), subset (for lyrics the marker font can't write: Romanian, Polish, Vietnamese, Cyrillic, …) | The Pangolin Project Authors | SIL OFL 1.1 |
-
-The Sony set was prepared with Blender (`blender -b --python tools/optimize.py -- original.glb pvm_dec.glb`), then `gltf-transform optimize` (meshopt, 512 px WebP, `--simplify false`). The script keeps the PlayStation's lid as its own node (`ps1_lid`, with its own material so the optimizer doesn't join it back) and writes its hinge axis and point, opening angle and spindle position into the node's extras, which `src/corner.js` uses to open the lid and put discs in. `tools/split-pvm.py` can split it into separate pieces if you'd rather place them one by one.
-
-Because the build embeds them, don't publish `dist/` from a build that includes them.
-
-For a public release, host the assets folder (models you're allowed to redistribute) somewhere CORS-enabled, for example the repository itself through jsDelivr, and build with:
-
-```bash
-CDS_ASSET_BASE=https://cdn.jsdelivr.net/gh/<you>/cd-shelf@<tag>/assets npm run build
-```
-
-The app then fetches the models and the font from there, and the app file drops from about 3.6 MB to about 1 MB.
-
-**How the TV gets the Canvas video:** Spotify Canvas loops are H.264 MP4 (Main profile, 1080×1920), and Spotify's bundled Chromium has no H.264 decoder, either in `<video>` or in WebCodecs. Spotify plays Canvas itself through a media stream in its Now Playing view's `<video>` (`[class*="canvasVideoContainer"] video`, a same-origin `blob:`). Twice a second the TV looks for that element. While it's showing a Canvas, the TV mirrors its frames as a `VideoTexture`; it only reads them, so Spotify keeps playing and pausing it. When there's no Canvas, the TV shows the cover art, music-channel style. `canvasFor` would download Canvas files directly if Spotify ever ships H.264.
-
-## Performance
-
-Measured in Spotify on an RTX 3050 Ti laptop with GPU timer queries (milliseconds of GPU work per frame):
-
-| | Before the optimization pass | After |
-| --- | --- | --- |
-| 102 discs | 5.7 ms, 5.2 M triangles | **2.3 ms, 1.0 M triangles** |
-| 102 discs at ~4× the pixels | 14.4 ms | **6.7 ms** |
-| TV corner | 4.5 ms | **1.7 ms** |
-| 2,000-disc library | 89.8 ms (8 fps), 165 M triangles | **3.4 ms (144 fps), 3.0 M triangles, 94 MB heap** |
-| Idle, top of the shelf | 30 fps | **0 fps** (nothing is drawn until something changes) |
-
-How:
-
-- **Recycled cases.** Only the rows in view (plus one either side) hold a slot: glass instances, booklet, spine, disc, contact shadow and texture layers. Rows scrolling in reuse freed slots, so memory and drawing stay flat for any library size. A newly slotted case shows a neutral placeholder layer until its spine is written (a few milliseconds of writes per frame, more while the view is still), and the finished pixels are cached for cases seen recently.
-- **Two builds of the case.** In the row only the hinge edge shows, so those cases use a shelf build of the cd-case geometry (rails, hinge, floor: 9k triangles). Hovered, pulled-out and arriving cases switch to the full build (40k) with the interior.
-- **Quality presets.** Auto picks High, Medium or Low from the GPU (one lower on battery); the header's Quality menu overrides it. Presets set the resolution cap (2×/1.5×/1×), anti-aliasing (4×/2×/off), shadow resolution, light bounces inside the glass (4/3/2), dust, picture-light pools and the TV's area light.
-- **Never too big.** Whatever the screen density or setting, the shelf and the open case render at most 2560 × 1440 pixels' worth, so their buffers can't exhaust a laptop's memory.
-- **Safety net.** If Auto still can't keep up at half resolution, it steps down a quality level (High → Medium → Low) and says so.
-- **Adaptive resolution.** The GPU time of each frame is measured (timer queries, or frame timing where those aren't available). Above budget the render scale steps down (to 50% at most), with plenty of headroom it steps back up.
-- **Cheap lighting.** The picture-light pools are a diffuse term injected into the shelf's materials instead of six point lights. Lights are dimmed rather than switched off, so materials never recompile mid-scroll. Shadows of moving cases refresh at most 15 times a second, and the shadow area is three screens tall so scrolling rarely moves it.
-- **Idle.** 30 fps for a few seconds after the last input or motion (15 fps unfocused), then nothing at all, unless the TV is on screen. With "reduce motion" turned on in the system settings, there's no camera drift, no dust, no spinning player-bar CD and no flicker or rolling bar on the TV.
-- **The room appears fast.** The scene is parked, not destroyed, when you leave the shelf (released after 10 minutes away), so coming back draws in about 0.15 s with everything in place. Models are parsed once per Spotify session, start loading right after the shelf's first frames, all in parallel, and stay hidden until their textures are uploaded (one per idle moment) and their shaders compiled in the background, so they appear without a stall. Fresh load: room ready in about 0.6–1.0 s, no main-thread stalls after the shelf opens.
-- **Lean assets.** Room models simplified (the Sony set 240k → 36.5k triangles in Blender; ashtray and whiteboard to a quarter) and meshopt-compressed, with 512 px textures (the room's objects are small on screen). Covers come from Spotify's own browser cache on later sessions.
-
-For profiling, from DevTools: `__cdShelf.profile({ busy: true, timing: true })`, wait a few seconds, then `__cdShelf.profile()` returns GPU ms per pass, fps, CPU ms and triangles. `baseDpr` simulates a high-density screen. Spotify's own UI uses a share of the GPU too (about 28–30% on this laptop), so compare against the shelf closed.
-
-### On a slow machine
-
-- Pick **Quality: Low** in the header (no anti-aliasing, 1× resolution, simpler glass, no dust or extra lights).
-- On Linux with NVIDIA, see "NVIDIA on Linux" above: hardware video decode can crash Spotify's GPU process and disable WebGL.
-- Smaller Spotify windows render fewer pixels; the adaptive resolution does the rest.
-
-## Credit
-
-- The jewel case (its geometry, the refraction and diffraction shaders, and the open and close
-  motion) is [cd-case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case) by
-  **Ann Nguyen** ([@ann_nnng](https://x.com/ann_nnng)), built with
-  [TypingMind](https://typingmind.com). Its original README is in `ORIGINAL_README.md`.
-- The room's models and the marker font are by their authors, listed with their licences in
-  [`release-assets/LICENSES.md`](release-assets/LICENSES.md).
-
-## Licence
-
-The code in this repository is [MIT](LICENSE). Ann Nguyen's case asks for credit when it's used or
-remixed (above). The models and the font in `release-assets/` keep their own licences.
-
-Not affiliated with Spotify. This changes how your own Spotify desktop app looks, through Spicetify.
+El código de este repositorio se distribuye bajo la licencia **MIT**. Los modelos 3D y fuentes mantienen sus respectivas licencias originales indicadas arriba.
