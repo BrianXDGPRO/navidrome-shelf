@@ -249,6 +249,28 @@
   const albumCache = new Map();
   const playlistCache = new Map();
   const trackMetaCache = new Map();
+  const starredMeta = {
+    albumDates: new Map(),
+    songCounts: new Map(),
+  };
+
+  function recordStarredData(starred2) {
+    if (!starred2) return;
+    for (const al of starred2.album || []) {
+      if (al?.id && al.starred) {
+        starredMeta.albumDates.set(String(al.id), String(al.starred));
+      }
+    }
+    if (Array.isArray(starred2.song)) {
+      starredMeta.songCounts.clear();
+      for (const s of starred2.song) {
+        if (s?.albumId) {
+          const aid = String(s.albumId);
+          starredMeta.songCounts.set(aid, (starredMeta.songCounts.get(aid) || 0) + 1);
+        }
+      }
+    }
+  }
 
   function cacheTrack(t, albumFallback = {}) {
     if (!t?.id) return;
@@ -262,6 +284,22 @@
       coverArt: t.coverArt || albumFallback.coverArt || albumFallback.id || "",
       durationMs: (Number(t.duration) || 0) * 1000,
     });
+  }
+
+  function mapSubsonicTrack(s, at = 0, extra = {}) {
+    cacheTrack(s, extra.albumFallback || {});
+    return {
+      at,
+      id: String(s.id),
+      uri: `spotify:track:${s.id}`,
+      name: s.title || s.name || "Untitled",
+      artist: s.artist || extra.artist || "Unknown Artist",
+      album: s.album || extra.album || "",
+      albumId: String(s.albumId || extra.albumId || ""),
+      coverArt: s.coverArt || extra.coverArt || s.albumId || "",
+      durationMs: (Number(s.duration) || 0) * 1000,
+      _fromLibraryRandom: !!extra.fromLibraryRandom,
+    };
   }
 
   // 4. Audio Engine & Player State
@@ -292,6 +330,15 @@
     updateNowPlayingBar();
   }
 
+  let currentShuffleScope = "disc";
+  try {
+    const savedSettings = JSON.parse(localStorage.getItem("cd-shelf:settings") || "{}");
+    if (savedSettings?.shuffleScope === "library") currentShuffleScope = "library";
+  } catch {}
+  function getShuffleScope() {
+    return currentShuffleScope === "library" ? "library" : "disc";
+  }
+
   const playerState = {
     contextUri: null,
     contextMeta: {},
@@ -299,9 +346,15 @@
     queue: [], // play order (shuffled or linear)
     index: -1,
     shuffle: false,
+    libraryShuffle: false,
+    refillingRandom: false,
+    queueSeq: 0,
     repeat: 0, // 0 = off, 1 = context, 2 = one
     scrobbledCurrent: false,
   };
+  let isSeekingDrag = false;
+  let dragSeekDirty = false;
+  let pendingSeekMs = null;
 
   function currentTrackObj() {
     if (playerState.index < 0 || playerState.index >= playerState.queue.length) return null;
@@ -316,10 +369,22 @@
     }
     const art = coverArtUrl(cur.coverArt || cur.albumId, 600);
     const thumb = coverArtUrl(cur.coverArt || cur.albumId, 300);
+    const isLibShuffle = playerState.libraryShuffle;
+    const contextUri =
+      isLibShuffle && cur._fromLibraryRandom && cur.albumId
+        ? `spotify:album:${cur.albumId}`
+        : playerState.contextUri || `spotify:album:${cur.albumId}`;
+    const contextMeta = isLibShuffle
+      ? {
+          context_description: cur.album || playerState.contextMeta?.context_description || "Aleatorio",
+          context_owner: cur.artist || "",
+          image_url: art,
+        }
+      : playerState.contextMeta || {};
     Spicetify.Player.data = {
       context: {
-        uri: playerState.contextUri || `spotify:album:${cur.albumId}`,
-        metadata: playerState.contextMeta || {},
+        uri: contextUri,
+        metadata: contextMeta,
       },
       item: {
         uri: cur.uri,
@@ -339,7 +404,145 @@
     };
   }
 
+  async function fetchRandomLibraryTracks(size = 50, excludeIds = []) {
+    if (!authState) return [];
+    const sr = await subsonicGet("getRandomSongs", { size });
+    const songs = sr?.randomSongs?.song || [];
+    const excluded = new Set(
+      (Array.isArray(excludeIds) ? excludeIds : [excludeIds]).filter(Boolean).map(String)
+    );
+    const filtered = songs.filter((s) => s?.id && !excluded.has(String(s.id)));
+    const pool = filtered.length ? filtered : songs.filter((s) => s?.id);
+    return pool.map((s, idx) => mapSubsonicTrack(s, idx, { fromLibraryRandom: true }));
+  }
+
+  function refillLibraryShuffleQueue(seq, { emitPause = false } = {}) {
+    if (playerState.refillingRandom) return Promise.resolve();
+    playerState.refillingRandom = true;
+    const upcomingIds = playerState.queue.slice(Math.max(0, playerState.index)).map((t) => t.id);
+    return fetchRandomLibraryTracks(50, upcomingIds)
+      .then((more) => {
+        if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) return;
+        if (playerState.index > 100) {
+          const trim = playerState.index - 100;
+          playerState.queue = playerState.queue.slice(trim);
+          playerState.index -= trim;
+        }
+        playerState.queue.push(...more);
+        if (emitPause) emitPlayer("onplaypause");
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (seq === playerState.queueSeq) {
+          playerState.refillingRandom = false;
+        }
+      });
+  }
+
+  async function startLibraryShuffle() {
+    if (!authState) {
+      openLoginModal();
+      return false;
+    }
+    const seq = ++playerState.queueSeq;
+    playerState.refillingRandom = false;
+    const songs = await fetchRandomLibraryTracks(50, []);
+    if (seq !== playerState.queueSeq || !songs.length) return false;
+    playerState.shuffle = true;
+    playerState.libraryShuffle = true;
+    playerState.tracks = [];
+    playerState.queue = songs;
+    playerState.index = 0;
+    const first = songs[0];
+    playerState.contextUri = first.albumId ? `spotify:album:${first.albumId}` : null;
+    playerState.contextMeta = {
+      context_description: first.album || "Aleatorio",
+      context_owner: first.artist || "",
+      image_url: coverArtUrl(first.coverArt || first.albumId, 600),
+    };
+    playCurrentQueueIndex();
+    return true;
+  }
+
+  function rebuildQueueForCurrent() {
+    const seq = ++playerState.queueSeq;
+    playerState.refillingRandom = false;
+    const cur = currentTrackObj();
+    const wantLibShuffle = playerState.shuffle && getShuffleScope() === "library";
+
+    if (wantLibShuffle) {
+      playerState.libraryShuffle = true;
+      if (cur) {
+        const historyBefore = playerState.queue.slice(0, Math.max(0, playerState.index));
+        playerState.queue = [...historyBefore, cur];
+        playerState.index = historyBefore.length;
+        syncSpicetifyPlayerData();
+        emitPlayer("onplaypause");
+        refillLibraryShuffleQueue(seq, { emitPause: true });
+      } else {
+        emitPlayer("onplaypause");
+      }
+      return;
+    }
+
+    playerState.libraryShuffle = false;
+    if (!cur) {
+      emitPlayer("onplaypause");
+      return;
+    }
+
+    const inCurrentTracks = playerState.tracks.findIndex((t) => t.uri === cur.uri);
+    if (!cur._fromLibraryRandom && inCurrentTracks >= 0 && playerState.tracks.length) {
+      const built = buildQueueFromTracks(playerState.tracks, inCurrentTracks, playerState.shuffle);
+      playerState.queue = built.queue;
+      playerState.index = built.index;
+      syncSpicetifyPlayerData();
+      emitPlayer("onplaypause");
+      return;
+    }
+
+    const historyBefore = playerState.queue.slice(0, Math.max(0, playerState.index));
+    playerState.queue = [...historyBefore, cur];
+    playerState.index = historyBefore.length;
+    if (cur.albumId) {
+      const albumUri = `spotify:album:${cur.albumId}`;
+      playerState.contextUri = albumUri;
+      playerState.contextMeta = {
+        context_description: cur.album || "Album",
+        context_owner: cur.artist || "",
+        image_url: coverArtUrl(cur.coverArt || cur.albumId, 600),
+      };
+      syncSpicetifyPlayerData();
+      emitPlayer("onplaypause");
+      fetchContextTracks(albumUri)
+        .then(({ meta, tracks }) => {
+          if (seq !== playerState.queueSeq || !tracks.length) return;
+          if (currentTrackObj()?.uri !== cur.uri) return;
+          if (playerState.shuffle && getShuffleScope() === "library") return;
+          playerState.contextUri = albumUri;
+          playerState.contextMeta = meta;
+          playerState.tracks = tracks;
+          const idx = tracks.findIndex((t) => t.uri === cur.uri);
+          const built = buildQueueFromTracks(tracks, Math.max(0, idx), playerState.shuffle);
+          playerState.queue = built.queue;
+          playerState.index = built.index;
+          syncSpicetifyPlayerData();
+          emitPlayer("onplaypause");
+        })
+        .catch(() => {});
+    } else {
+      syncSpicetifyPlayerData();
+      emitPlayer("onplaypause");
+    }
+  }
+
   function playCurrentQueueIndex() {
+    isSeekingDrag = false;
+    dragSeekDirty = false;
+    pendingSeekMs = null;
+    try {
+      audio.currentTime = 0;
+    } catch {}
     const cur = currentTrackObj();
     if (!cur) {
       audio.pause();
@@ -354,6 +557,15 @@
     audio.play().catch((err) => console.warn("[cd-shelf] play error:", err));
     emitPlayer("songchange");
     emitPlayer("onplaypause");
+    if (
+      playerState.libraryShuffle &&
+      playerState.shuffle &&
+      getShuffleScope() === "library" &&
+      playerState.queue.length - 1 - playerState.index < 8 &&
+      !playerState.refillingRandom
+    ) {
+      refillLibraryShuffleQueue(playerState.queueSeq);
+    }
     // Scrobble "now playing" to Navidrome
     subsonicGet("scrobble", { id: cur.id, submission: "false" }).catch(() => {});
     if ("mediaSession" in navigator) {
@@ -378,7 +590,17 @@
       syncSpicetifyPlayerData();
       emitPlayer("songchange");
     }
+    if (pendingSeekMs !== null) {
+      const target = pendingSeekMs;
+      pendingSeekMs = null;
+      try {
+        audio.currentTime = Math.max(0, target / 1000);
+      } catch {}
+    }
+    updateProgressBarOnly();
   });
+  audio.addEventListener("seeked", () => updateProgressBarOnly());
+  audio.addEventListener("durationchange", () => updateProgressBarOnly());
   audio.addEventListener("timeupdate", () => {
     const cur = currentTrackObj();
     if (cur && !playerState.scrobbledCurrent && audio.currentTime > 10) {
@@ -781,6 +1003,9 @@
             });
             const albums = sr?.albumList2?.album || [];
             const items = albums.map((al) => {
+              if (al.starred && al.id) {
+                starredMeta.albumDates.set(String(al.id), String(al.starred));
+              }
               const count = Number(al.songCount) || 0;
               const albumType = al.compilation
                 ? "compilation"
@@ -798,6 +1023,7 @@
                 images: [{ url: coverArtUrl(al.coverArt || al.id, 256) }],
                 addedAt: al.created || new Date().toISOString(),
                 lastPlayedAt: al.played || "",
+                starredAt: al.starred || "",
               };
             });
             return {
@@ -826,16 +1052,38 @@
         async getTracks({ limit = 500, offset = 0 } = {}) {
           if (!authState) return { items: [] };
           const sr = await subsonicGet("getStarred2");
+          recordStarredData(sr?.starred2);
           const songs = sr?.starred2?.song || [];
           songs.forEach((s) => cacheTrack(s, {}));
           const slice = songs.slice(offset, offset + limit);
           return {
-            items: slice.map((s) => ({
-              uri: `spotify:track:${s.id}`,
-              name: s.title,
-              artists: [{ name: s.artist || "" }],
-              duration: { milliseconds: (Number(s.duration) || 0) * 1000 },
-            })),
+            items: slice.map((s) => {
+              const art = coverArtUrl(s.coverArt || s.albumId, 600);
+              const thumb = coverArtUrl(s.coverArt || s.albumId, 300);
+              return {
+                uri: `spotify:track:${s.id}`,
+                name: s.title,
+                artists: [{ name: s.artist || "" }],
+                album: {
+                  uri: s.albumId ? `spotify:album:${s.albumId}` : "",
+                  name: s.album || "",
+                  images: [
+                    ...(art ? [{ label: "large", url: art, width: 600 }] : []),
+                    ...(thumb ? [{ label: "standard", url: thumb, width: 300 }] : []),
+                  ],
+                },
+                duration: { milliseconds: (Number(s.duration) || 0) * 1000 },
+              };
+            }),
+          };
+        },
+        getStarredInfo(uri) {
+          const parts = String(uri || "").split(":");
+          if (parts[1] !== "album") return null;
+          const id = parts.slice(2).join(":");
+          return {
+            starredAt: starredMeta.albumDates.get(id) || "",
+            starredSongs: starredMeta.songCounts.get(id) || 0,
           };
         },
         getEvents() {
@@ -961,14 +1209,20 @@
         return !audio.paused && !audio.ended && !!audio.src;
       },
       async playUri(contextUri, _options = {}, skipOpts = {}) {
+        const seq = ++playerState.queueSeq;
+        playerState.refillingRandom = false;
         const { meta, tracks } = await fetchContextTracks(contextUri);
-        if (!tracks.length) return;
+        if (seq !== playerState.queueSeq || !tracks.length) return false;
         playerState.contextUri = contextUri;
         playerState.contextMeta = meta;
         playerState.tracks = tracks;
+        const useLibShuffle = playerState.shuffle && getShuffleScope() === "library";
+        playerState.libraryShuffle = useLibShuffle;
         let startIdx = 0;
         if (skipOpts?.skipTo) {
-          if (typeof skipOpts.skipTo.index === "number" && skipOpts.skipTo.index >= 0) {
+          if (skipOpts.skipTo.last) {
+            startIdx = Math.max(0, tracks.length - 1);
+          } else if (typeof skipOpts.skipTo.index === "number" && skipOpts.skipTo.index >= 0) {
             startIdx = skipOpts.skipTo.index;
           } else if (skipOpts.skipTo.uri) {
             const found = tracks.findIndex((t) => t.uri === skipOpts.skipTo.uri);
@@ -977,14 +1231,34 @@
         } else if (playerState.shuffle) {
           startIdx = Math.floor(Math.random() * tracks.length);
         }
+        if (useLibShuffle) {
+          const safeIdx = Math.max(0, Math.min(tracks.length - 1, startIdx));
+          const firstTrack = tracks[safeIdx];
+          playerState.queue = [firstTrack];
+          playerState.index = 0;
+          playCurrentQueueIndex();
+          fetchRandomLibraryTracks(50, firstTrack.id)
+            .then((more) => {
+              if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) return;
+              playerState.queue.push(...more);
+              emitPlayer("onplaypause");
+            })
+            .catch(() => {});
+          return true;
+        }
         const built = buildQueueFromTracks(tracks, startIdx, playerState.shuffle);
         playerState.queue = built.queue;
         playerState.index = built.index;
         playCurrentQueueIndex();
+        return true;
       },
       togglePlay() {
         if (!audio.src) {
-          if (playerState.queue.length) playCurrentQueueIndex();
+          if (playerState.queue.length) {
+            playCurrentQueueIndex();
+          } else if (playerState.shuffle && getShuffleScope() === "library") {
+            startLibraryShuffle();
+          }
           return;
         }
         if (audio.paused) {
@@ -1000,13 +1274,59 @@
         audio.pause();
       },
       next() {
-        if (!playerState.queue.length) return;
+        if (!playerState.queue.length) {
+          if (playerState.shuffle && getShuffleScope() === "library") {
+            startLibraryShuffle();
+          }
+          return;
+        }
         if (playerState.index + 1 < playerState.queue.length) {
           playerState.index++;
           playCurrentQueueIndex();
-        } else if (playerState.repeat === 1) {
+        } else if (playerState.repeat === 1 && !playerState.libraryShuffle) {
           playerState.index = 0;
           playCurrentQueueIndex();
+        } else if (playerState.libraryShuffle && playerState.shuffle && getShuffleScope() === "library") {
+          const seq = playerState.queueSeq;
+          const curId = currentTrackObj()?.id;
+          fetchRandomLibraryTracks(50, curId)
+            .then((more) => {
+              if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) {
+                if (playerState.repeat === 1 && playerState.queue.length) {
+                  playerState.index = 0;
+                  playCurrentQueueIndex();
+                } else {
+                  audio.pause();
+                  audio.currentTime = 0;
+                  emitPlayer("onplaypause");
+                }
+                return;
+              }
+              playerState.queue.push(...more);
+              playerState.index++;
+              playCurrentQueueIndex();
+            })
+            .catch(() => {});
+        } else if (!playerState.shuffle && typeof window.__cdsNextShelfDisc === "function") {
+          const cur = currentTrackObj();
+          const finishedUri =
+            playerState.contextUri || (cur?.albumId ? `spotify:album:${cur.albumId}` : null);
+          const seq = playerState.queueSeq;
+          Promise.resolve(window.__cdsNextShelfDisc(finishedUri))
+            .then((started) => {
+              if (seq !== playerState.queueSeq) return;
+              if (!started) {
+                audio.pause();
+                audio.currentTime = 0;
+                emitPlayer("onplaypause");
+              }
+            })
+            .catch(() => {
+              if (seq !== playerState.queueSeq) return;
+              audio.pause();
+              audio.currentTime = 0;
+              emitPlayer("onplaypause");
+            });
         } else {
           audio.pause();
           audio.currentTime = 0;
@@ -1015,8 +1335,13 @@
       },
       back() {
         if (!playerState.queue.length) return;
-        if (audio.currentTime > 3) {
+        const resetCur = () => {
+          pendingSeekMs = null;
           audio.currentTime = 0;
+          updateProgressBarOnly(0);
+        };
+        if (audio.currentTime > 3) {
+          resetCur();
           return;
         }
         if (playerState.index > 0) {
@@ -1025,14 +1350,36 @@
         } else if (playerState.repeat === 1) {
           playerState.index = playerState.queue.length - 1;
           playCurrentQueueIndex();
+        } else if (!playerState.shuffle && typeof window.__cdsPrevShelfDisc === "function") {
+          const cur = currentTrackObj();
+          const curUri =
+            playerState.contextUri || (cur?.albumId ? `spotify:album:${cur.albumId}` : null);
+          const seq = playerState.queueSeq;
+          Promise.resolve(window.__cdsPrevShelfDisc(curUri))
+            .then((started) => {
+              if (seq === playerState.queueSeq && !started) resetCur();
+            })
+            .catch(() => {
+              if (seq === playerState.queueSeq) resetCur();
+            });
         } else {
-          audio.currentTime = 0;
+          resetCur();
         }
       },
       seek(ms) {
         if (!Number.isFinite(ms)) return;
-        audio.currentTime = Math.max(0, ms / 1000);
-        updateProgressBarOnly();
+        const dur = this.getDuration();
+        const clampedMs = Math.max(0, dur > 0 ? Math.min(dur, ms) : ms);
+        if (typeof audio.readyState === "number" && audio.readyState < 1) {
+          pendingSeekMs = clampedMs;
+          try {
+            audio.currentTime = clampedMs / 1000;
+          } catch {}
+        } else {
+          pendingSeekMs = null;
+          audio.currentTime = clampedMs / 1000;
+        }
+        updateProgressBarOnly(clampedMs);
       },
       getProgress() {
         return Math.round((audio.currentTime || 0) * 1000);
@@ -1062,14 +1409,7 @@
         const nextShuffle = !!val;
         if (nextShuffle === playerState.shuffle) return;
         playerState.shuffle = nextShuffle;
-        const cur = currentTrackObj();
-        if (playerState.tracks.length && cur) {
-          const origIdx = playerState.tracks.findIndex((t) => t.uri === cur.uri);
-          const built = buildQueueFromTracks(playerState.tracks, Math.max(0, origIdx), nextShuffle);
-          playerState.queue = built.queue;
-          playerState.index = built.index;
-        }
-        emitPlayer("onplaypause");
+        rebuildQueueForCurrent();
       },
       getRepeat() {
         return playerState.repeat;
@@ -1083,6 +1423,9 @@
       },
       removeEventListener(type, fn) {
         playerListeners[type]?.delete(fn);
+      },
+      _getQueueSeq() {
+        return playerState.queueSeq;
       },
     },
   };
@@ -1595,12 +1938,51 @@ html, body {
     npElements.repeat.addEventListener("click", () =>
       Spicetify.Player.setRepeat((Spicetify.Player.getRepeat() + 1) % 3)
     );
-    npElements.seek.addEventListener("input", (e) => {
+    let skipNextSeekChange = false;
+    const commitSeekFromSlider = () => {
       const dur = Spicetify.Player.getDuration();
       if (dur > 0) {
-        Spicetify.Player.seek((Number(e.target.value) / 1000) * dur);
+        Spicetify.Player.seek((Number(npElements.seek.value) / 1000) * dur);
+      }
+    };
+    npElements.seek.addEventListener("pointerdown", () => {
+      isSeekingDrag = true;
+      dragSeekDirty = false;
+      skipNextSeekChange = false;
+    });
+    npElements.seek.addEventListener("input", () => {
+      if (isSeekingDrag) {
+        dragSeekDirty = true;
+        const dur = Spicetify.Player.getDuration();
+        if (dur > 0) {
+          npElements.cur.textContent = fmtTime((Number(npElements.seek.value) / 1000) * dur);
+        }
+      } else {
+        commitSeekFromSlider();
       }
     });
+    const endSeekDrag = () => {
+      if (!isSeekingDrag) return;
+      isSeekingDrag = false;
+      if (dragSeekDirty) {
+        dragSeekDirty = false;
+        skipNextSeekChange = true;
+        commitSeekFromSlider();
+      }
+    };
+    npElements.seek.addEventListener("change", () => {
+      isSeekingDrag = false;
+      if (skipNextSeekChange && !dragSeekDirty) {
+        skipNextSeekChange = false;
+        return;
+      }
+      dragSeekDirty = false;
+      skipNextSeekChange = false;
+      commitSeekFromSlider();
+    });
+    npElements.seek.addEventListener("blur", endSeekDrag);
+    window.addEventListener("pointerup", endSeekDrag);
+    window.addEventListener("pointercancel", endSeekDrag);
     npElements.vol.addEventListener("input", (e) => {
       Spicetify.Player.setVolume(Number(e.target.value));
     });
@@ -1633,15 +2015,20 @@ html, body {
     });
   }
 
-  function updateProgressBarOnly() {
+  function updateProgressBarOnly(overridePosMs) {
     if (!npElements) return;
-    const pos = Spicetify.Player.getProgress();
+    const pos =
+      typeof overridePosMs === "number"
+        ? overridePosMs
+        : pendingSeekMs !== null
+        ? pendingSeekMs
+        : Spicetify.Player.getProgress();
     const dur = Spicetify.Player.getDuration();
-    npElements.cur.textContent = fmtTime(pos);
     npElements.dur.textContent = fmtTime(dur);
-    if (dur > 0 && document.activeElement !== npElements.seek) {
-      npElements.seek.value = String(Math.min(1000, Math.round((pos / dur) * 1000)));
-    }
+    if (isSeekingDrag) return;
+    npElements.cur.textContent = fmtTime(pos);
+    npElements.seek.value =
+      dur > 0 ? String(Math.max(0, Math.min(1000, Math.round((pos / dur) * 1000)))) : "0";
   }
 
   function updateNowPlayingBar() {
@@ -1746,7 +2133,17 @@ html, body {
         albumCache.clear();
         playlistCache.clear();
         trackMetaCache.clear();
-        updateNowPlayingBar();
+        starredMeta.albumDates.clear();
+        starredMeta.songCounts.clear();
+        playerState.queueSeq++;
+        playerState.refillingRandom = false;
+        playerState.libraryShuffle = false;
+        playerState.tracks = [];
+        playerState.queue = [];
+        playerState.index = -1;
+        syncSpicetifyPlayerData();
+        emitPlayer("songchange");
+        emitPlayer("onplaypause");
         modalEl.remove();
         modalEl = null;
         openLoginModal();
@@ -1824,6 +2221,8 @@ html, body {
         albumCache.clear();
         playlistCache.clear();
         trackMetaCache.clear();
+        starredMeta.albumDates.clear();
+        starredMeta.songCounts.clear();
         modalEl.remove();
         modalEl = null;
         updateNowPlayingBar();
@@ -1847,6 +2246,8 @@ html, body {
     dividers: true,
     pins: [],
     sort: "recent",
+    shuffleScope: "disc",
+    autoNextDisc: false,
     dust: true,
     sway: true,
     cursorLight: true,
@@ -1902,10 +2303,16 @@ html, body {
         document.body.classList.toggle("cds-hide-sidebar", t.hideSidebar);
         document.body.classList.toggle("cds-disc", t.discCover);
       };
+    currentShuffleScope = t.shuffleScope === "library" ? "library" : "disc";
     c();
     m((n) => {
+      const prevScope = currentShuffleScope;
       t = n;
+      currentShuffleScope = t.shuffleScope === "library" ? "library" : "disc";
       c();
+      if (currentShuffleScope !== prevScope && playerState.shuffle) {
+        rebuildQueueForCurrent();
+      }
     });
 
     let d = (n) => {
