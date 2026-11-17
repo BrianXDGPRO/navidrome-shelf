@@ -437,12 +437,14 @@
   }
 
   let currentShuffleScope = "disc";
+  let currentFavoritesShuffle = "albums";
   try {
     const savedSettings = JSON.parse(localStorage.getItem("cd-shelf:settings") || "{}");
-    if (savedSettings?.shuffleScope === "library") currentShuffleScope = "library";
+    if (savedSettings?.shuffleScope === "library" || savedSettings?.shuffleScope === "shelf") currentShuffleScope = "library";
+    if (savedSettings?.favoritesShuffle === "tracks") currentFavoritesShuffle = "tracks";
   } catch {}
   function getShuffleScope() {
-    return currentShuffleScope === "library" ? "library" : "disc";
+    return currentShuffleScope === "library" || currentShuffleScope === "shelf" ? "library" : "disc";
   }
 
   const playerState = {
@@ -510,7 +512,7 @@
     };
   }
 
-  async function fetchRandomLibraryTracks(size = 50, excludeIds = []) {
+  async function fetchRandomLibraryFallback(size = 50, excludeIds = []) {
     if (!authState) return [];
     const sr = await subsonicGet("getRandomSongs", { size });
     const songs = sr?.randomSongs?.song || [];
@@ -522,11 +524,143 @@
     return pool.map((s, idx) => mapSubsonicTrack(s, idx, { fromLibraryRandom: true }));
   }
 
+  let shelfDiscDeck = [];
+  let shelfDeckKey = "";
+  const recentShelfTrackIds = [];
+
+  function rememberShelfTrack(id) {
+    if (!id) return;
+    const key = String(id);
+    const idx = recentShelfTrackIds.indexOf(key);
+    if (idx >= 0) recentShelfTrackIds.splice(idx, 1);
+    recentShelfTrackIds.push(key);
+    if (recentShelfTrackIds.length > 150) recentShelfTrackIds.shift();
+  }
+
+  function shuffleArray(arr) {
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  function dealShelfDiscs(shelfUris, count) {
+    const key = shelfUris.join("|");
+    if (key !== shelfDeckKey) {
+      shelfDeckKey = key;
+      shelfDiscDeck = shuffleArray(shelfUris);
+    } else {
+      const valid = new Set(shelfUris);
+      shelfDiscDeck = shelfDiscDeck.filter((u) => valid.has(u));
+    }
+    const target = Math.min(shelfUris.length, count);
+    const dealt = [];
+    const dealtSet = new Set();
+    while (dealt.length < target) {
+      if (!shelfDiscDeck.length) {
+        const remaining = shelfUris.filter((u) => !dealtSet.has(u));
+        if (!remaining.length) break;
+        shelfDiscDeck = shuffleArray(remaining);
+      }
+      const nextUri = shelfDiscDeck.pop();
+      if (nextUri && !dealtSet.has(nextUri)) {
+        dealtSet.add(nextUri);
+        dealt.push(nextUri);
+      }
+    }
+    return dealt;
+  }
+
+  async function fetchRandomLibraryTracks(size = 24, excludeIds = []) {
+    if (!authState) return [];
+    const getShelf = window.__cdsGetShelfItems || window.__cdsGetShelfDiscs;
+    const shelfItems = typeof getShelf === "function" ? getShelf() : [];
+    const shelfUris = Array.isArray(shelfItems) ? shelfItems.map((d) => d?.uri).filter(Boolean) : [];
+    if (!shelfUris.length) {
+      return fetchRandomLibraryFallback(size, excludeIds);
+    }
+    const excluded = new Set(
+      (Array.isArray(excludeIds) ? excludeIds : [excludeIds]).filter(Boolean).map(String)
+    );
+    const recentSet = new Set(recentShelfTrackIds);
+    const dealtUris = dealShelfDiscs(shelfUris, Math.min(shelfUris.length, Math.max(12, Math.min(size, 24))));
+    const discResults = await Promise.all(
+      dealtUris.map((uri) => fetchContextTracks(uri).catch(() => ({ tracks: [] })))
+    );
+
+    const favTracksOnly = window.__cdsGetShelfFilter?.() === "favorites" && currentFavoritesShuffle === "tracks";
+    const buckets = [];
+    const fallbackBuckets = [];
+    for (const res of discResults) {
+      const rawTracks = Array.isArray(res?.tracks) ? res.tracks.filter((t) => t?.id) : [];
+      if (!rawTracks.length) continue;
+      const pickUsable = (list) => {
+        const fresh = list.filter(
+          (t) => !excluded.has(String(t.id)) && !recentSet.has(String(t.id))
+        );
+        const notUpcoming = list.filter((t) => !excluded.has(String(t.id)));
+        return fresh.length ? fresh : notUpcoming.length ? notUpcoming : list;
+      };
+      if (favTracksOnly) {
+        const starred = rawTracks.filter((t) => isSongStarred(t.id));
+        if (starred.length) buckets.push(shuffleArray(pickUsable(starred)));
+        fallbackBuckets.push(shuffleArray(pickUsable(rawTracks)));
+      } else {
+        buckets.push(shuffleArray(pickUsable(rawTracks)));
+      }
+    }
+    if (!buckets.length && fallbackBuckets.length) {
+      buckets.push(...fallbackBuckets);
+    }
+
+    if (!buckets.length) {
+      return fetchRandomLibraryFallback(size, excludeIds);
+    }
+
+    const picked = [];
+    const pickedIds = new Set();
+    let active = shuffleArray(buckets);
+    while (picked.length < size && active.length) {
+      const nextActive = [];
+      for (const bucket of active) {
+        let chosen = null;
+        while (bucket.length) {
+          const cand = bucket.pop();
+          const cid = String(cand.id);
+          if (!pickedIds.has(cid)) {
+            chosen = cand;
+            break;
+          }
+        }
+        if (chosen) {
+          pickedIds.add(String(chosen.id));
+          picked.push(chosen);
+          if (picked.length >= size) break;
+        }
+        if (bucket.length) nextActive.push(bucket);
+      }
+      active = shuffleArray(nextActive);
+    }
+
+    if (!picked.length) {
+      return fetchRandomLibraryFallback(size, excludeIds);
+    }
+
+    return picked.map((t, idx) =>
+      mapSubsonicTrack(t, idx, {
+        fromLibraryRandom: true,
+        albumFallback: { id: t.albumId, name: t.album, artist: t.artist, coverArt: t.coverArt },
+      })
+    );
+  }
+
   function refillLibraryShuffleQueue(seq, { emitPause = false } = {}) {
     if (playerState.refillingRandom) return Promise.resolve();
     playerState.refillingRandom = true;
     const upcomingIds = playerState.queue.slice(Math.max(0, playerState.index)).map((t) => t.id);
-    return fetchRandomLibraryTracks(50, upcomingIds)
+    return fetchRandomLibraryTracks(24, upcomingIds)
       .then((more) => {
         if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) return;
         if (playerState.index > 100) {
@@ -552,7 +686,7 @@
     }
     const seq = ++playerState.queueSeq;
     playerState.refillingRandom = false;
-    const songs = await fetchRandomLibraryTracks(50, []);
+    const songs = await fetchRandomLibraryTracks(24, []);
     if (seq !== playerState.queueSeq || !songs.length) return false;
     playerState.shuffle = true;
     playerState.libraryShuffle = true;
@@ -658,6 +792,7 @@
       return;
     }
     playerState.scrobbledCurrent = false;
+    rememberShelfTrack(cur.id);
     syncSpicetifyPlayerData();
     audio.src = streamUrl(cur.id);
     audio.play().catch((err) => console.warn("[cd-shelf] play error:", err));
@@ -1344,7 +1479,7 @@
           playerState.queue = [firstTrack];
           playerState.index = 0;
           playCurrentQueueIndex();
-          fetchRandomLibraryTracks(50, firstTrack.id)
+          fetchRandomLibraryTracks(24, firstTrack.id)
             .then((more) => {
               if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) return;
               playerState.queue.push(...more);
@@ -1396,7 +1531,7 @@
         } else if (playerState.libraryShuffle && playerState.shuffle && getShuffleScope() === "library") {
           const seq = playerState.queueSeq;
           const curId = currentTrackObj()?.id;
-          fetchRandomLibraryTracks(50, curId)
+          fetchRandomLibraryTracks(24, curId)
             .then((more) => {
               if (seq !== playerState.queueSeq || !playerState.libraryShuffle || !more.length) {
                 if (playerState.repeat === 1 && playerState.queue.length) {
@@ -2438,14 +2573,17 @@ html, body {
         document.body.classList.toggle("cds-hide-sidebar", t.hideSidebar);
         document.body.classList.toggle("cds-disc", t.discCover);
       };
-    currentShuffleScope = t.shuffleScope === "library" ? "library" : "disc";
+    currentShuffleScope = t.shuffleScope === "library" || t.shuffleScope === "shelf" ? "library" : "disc";
+    currentFavoritesShuffle = t.favoritesShuffle === "tracks" ? "tracks" : "albums";
     c();
     m((n) => {
       const prevScope = currentShuffleScope;
+      const prevFavShuffle = currentFavoritesShuffle;
       t = n;
-      currentShuffleScope = t.shuffleScope === "library" ? "library" : "disc";
+      currentShuffleScope = t.shuffleScope === "library" || t.shuffleScope === "shelf" ? "library" : "disc";
+      currentFavoritesShuffle = t.favoritesShuffle === "tracks" ? "tracks" : "albums";
       c();
-      if (currentShuffleScope !== prevScope && playerState.shuffle) {
+      if ((currentShuffleScope !== prevScope || (currentFavoritesShuffle !== prevFavShuffle && getShuffleScope() === "library")) && playerState.shuffle) {
         rebuildQueueForCurrent();
       }
     });
